@@ -148,8 +148,15 @@ template <typename T>
 using term = boost::yap::terminal<boost::yap::expression, T>;
 
 struct Transformer {
-    term<Number> operator() (term<Number> n) {
+    term<Number> operator() (const term<Number> &n) {
         printf("Terminal1 matched\n");
+        double value = yap::value(n).x;
+        yap::value(n).Println();
+        return term<Number>{Number(value + 10.0)};
+    }
+
+    term<Number> operator() (const term<Number &> &n) {
+        printf("Terminal2 matched\n");
         double value = yap::value(n).x;
         yap::value(n).Println();
         return term<Number>{Number(value + 10.0)};
@@ -207,7 +214,7 @@ void TestNumberExpr3() {
     // Transformer::operand(term<Number> n) or Transformer::operand(term<Number> const &n)
     // can match term<Number> but can not match term<Number &>, neither does
     // Transfoermer::operand(term<Number> &&n)
-    auto expr1 = term<Number>(n1) + term<Number>(n2);
+    auto expr1 = term<Number>(n1) + n2;
     yap::print(std::cout, expr1);
     auto expr2 = yap::transform(expr1, Transformer{});
     auto r1 = yap::evaluate(expr2);
