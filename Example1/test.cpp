@@ -148,26 +148,37 @@ template <typename T>
 using term = boost::yap::terminal<boost::yap::expression, T>;
 
 struct Transformer {
-    term<Number> operator() (term<Number> const &n);
+    term<Number> operator() (term<Number> n) {
+        printf("Terminal1 matched\n");
+        double value = yap::value(n).x;
+        yap::value(n).Println();
+        return term<Number>{Number(value + 10.0)};
+    }
 
     template <typename Expr1, typename Expr2>
     auto operator() (yap::expression<
                         yap::expr_kind::plus,
                         boost::hana::tuple<Expr1, Expr2> > const &plus_expr) {
-        printf("plus_tag matched\n");
+        printf("plus_expr matched\n");
         yap::print(std::cout, yap::left(plus_expr));
         yap::print(std::cout, yap::right(plus_expr));
-        return yap::transform(yap::left(plus_expr), *this) + 
-               yap::transform(yap::right(plus_expr), *(this));
+        return yap::transform(yap::left(plus_expr), *this) +
+               yap::transform(yap::right(plus_expr), *this);
+    }
+
+    // template <yap::expr_kind Kind, typename... Args>
+    // auto operator() (yap::expr_tag<Kind>, Args &&... args) {
+    //     printf("Should not match this\n");
+    //     // auto tuple = boost::hana::tuple(args...);
+    // }
+
+    template <typename Expr>
+    auto operator() (Expr const &expr) {
+        printf("Should not match this\n");
+        yap::print(std::cout, expr);
+        return expr;
     }
 };
-
-term<Number> Transformer::operator() (term<Number> const &n) {
-    printf("Terminal matched\n");
-    double value = yap::value(n).x;
-    yap::value(n).Println();
-    return term<Number>{std::move(Number(value + 10.0))};
-}
 
 void TestNumberExpr2() {
     auto n1 = Number();
@@ -190,6 +201,12 @@ void TestNumberExpr3() {
     auto n3 = Number(2.0);
     Config config;
 
+    // Note: if term<Number>(n1) + n2, then it would be term<Number> for
+    // 1st operand and term<Number &> for 2nd operand. If term<Number>(n1) +
+    // term<Number>(n2), then it would be term<Number> for both operands.
+    // Transformer::operand(term<Number> n) or Transformer::operand(term<Number> const &n)
+    // can match term<Number> but can not match term<Number &>, neither does
+    // Transfoermer::operand(term<Number> &&n)
     auto expr1 = term<Number>(n1) + term<Number>(n2);
     yap::print(std::cout, expr1);
     auto expr2 = yap::transform(expr1, Transformer{});
