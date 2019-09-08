@@ -39,6 +39,13 @@ int main ()
         >
     >
     yap_expr = term<double (*)(double)>{{std::sqrt}}(3.0) + 8.0f;
+
+    auto term1 = term<double>(3.0);
+    PrintTypeName(term1);
+
+    auto term2 = term<double (*)(double)>{{std::sqrt}};
+    PrintTypeName(term2);
+
     auto yap_expr2 = term<double (*)(double)>{{std::sqrt}}(3.0);
     boost::yap::print(std::cout, yap_expr2);
     return 0;
