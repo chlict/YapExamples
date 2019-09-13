@@ -1,0 +1,1 @@
+This case shows using call operator to emulate if_then_else.
