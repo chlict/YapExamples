@@ -73,19 +73,24 @@ struct Transformer {
     auto operator() (yap::expr_tag<yap::expr_kind::plus>,
                      Expr1 &&lhs, Expr2 &&rhs) {
         printf("plus_expr matched\n");
-        return yap::transform(yap::as_expr(lhs), *this) +
-               yap::transform(yap::as_expr(rhs), *this);
+        return Add(yap::transform(yap::as_expr(lhs), *this),
+                   yap::transform(yap::as_expr(rhs), *this));
     }
 
     template <typename Expr1, typename Expr2>
     auto operator() (yap::expr_tag<yap::expr_kind::multiplies>,
                      Expr1 &&lhs, Expr2 &&rhs) {
         printf("mult_expr matched\n");
-        return yap::make_expression<yap::expr_kind::call>(
-            yap::make_terminal(Mul),
-            yap::transform(yap::as_expr(lhs), *this),
-            yap::transform(yap::as_expr(rhs), *this)
-        );
+        return Mul(yap::transform(yap::as_expr(lhs), *this),
+                   yap::transform(yap::as_expr(rhs), *this));
+    }
+
+    template <typename Expr1, typename Expr2>
+    auto operator() (yap::expr_tag<yap::expr_kind::comma>,
+                     Expr1 &&lhs, Expr2 &&rhs) {
+        printf("comma_expr matched\n");
+        yap::transform(yap::as_expr(lhs), *this);
+        return yap::transform(yap::as_expr(rhs), *this);
     }
 
     template <typename Cond, typename Then, typename Else>
@@ -119,14 +124,13 @@ void TestNumberExpr() {
     auto n4 = Number(3.0);
     Config config;
 
-    auto cond = yap::make_terminal(true);
-    auto term2 = yap::make_terminal(2);
-    auto term3 = yap::make_terminal(3);
-    auto then_ = yap::make_terminal(Inc)(term2) + term2;
-    auto else_ = term3 + term3;
-
-    auto if_ = yap::make_terminal(IfExpr{});
-    auto expr1 = if_(cond, then_, else_);
+    auto e1 = yap::make_terminal(n1) + yap::make_terminal(n2);
+    auto e2 = yap::make_terminal(n3) + yap::make_terminal(n4);
+    auto fn = yap::make_terminal(Inc);
+ 
+    // auto expr1 = yap::make_expression<yap::expr_kind::comma>(e1, e2);
+    auto expr1 = (e1, e2);
+    // for_(e1 : range1, e2 : range2, e3 : range3) -> (e1.CopyTo<UBUF>() + e2.CopyTo<UBUF>()).CopyTo<GM>(e3)
 
     std::cout << "- Before transformation:\n";
     yap::print(std::cout, expr1);
