@@ -89,40 +89,46 @@ struct PlaceholderReplacement
     template <long long I>
     auto operator() (boost::yap::expr_tag<boost::yap::expr_kind::terminal>,
                      boost::yap::placeholder<I>)
-    {   std::cout << "placeholder matched\n";
-        // static_assert(I <= hana::length(exprList), "Number of placeholders overflow");
-        // std::cout << "length(exprList) = " << hana::length(exprList) << std::endl;
-        // static_assert(hana::llong_c<I> <= hana::length(exprList));
-        // static_assert(hana::size_c<I> <= hana::length(exprList));
-        
+    {
+        static_assert(I <= sizeof...(ExprList), "Too many placeholders");        
+        std::cout << "placeholder matched\n";
         auto expr = exprList[hana::llong_c<I - 1>];
         return expr;
     }
 };
 
 template <typename... RangeExprs>
-struct ForEachRangeImpl {
+struct ForEachRangeObject {
     hana::tuple<RangeExprs...> rangeExprs;
 
     static_assert(sizeof...(RangeExprs) > 0, "Empty range expressions");
 
-    ForEachRangeImpl(const RangeExprs &... ranges) : rangeExprs(ranges...) {
-        yap::print(std::cout, rangeExprs[0_c]);
-    }
+    ForEachRangeObject(const RangeExprs &... ranges) : rangeExprs(ranges...) {}
 
     template<typename Expr>
     auto operator[](Expr && expr)
     {
         std::cout << "operator[] matched\n";
         yap::print(std::cout, expr);
-        return yap::transform(expr, PlaceholderReplacement{rangeExprs});
+        if constexpr (sizeof...(RangeExprs) == 2) {
+            auto &&range1 = yap::value(rangeExprs[0_c]);
+            auto &&range2 = yap::value(rangeExprs[1_c]);
+            for (auto begin1 = range1.begin(), end1 = range1.end(), begin2 = range2.begin(), end2 = range2.end();
+                 begin1 != end1 && begin2 != end2;
+                 begin1++, begin2++) {
+                std::cout << *begin1 << " " << *begin2 << std::endl;
+                auto tpl = hana::make_tuple(yap::make_terminal(*begin1), yap::make_terminal(*begin2));
+                auto expr2 = yap::transform(expr, PlaceholderReplacement(tpl));
+                yap::print(std::cout, expr2);
+                yap::evaluate(expr2);
+            }
+        }
     }
-
 };
 
 template <typename... Exprs>
 auto for_each_range(const Exprs &... exprs) {
-    return ForEachRangeImpl(exprs...);
+    return ForEachRangeObject(exprs...);
 }
 
 int main ()
@@ -153,13 +159,14 @@ int main ()
 }
 
 {
+    auto const cout = boost::yap::make_terminal(std::cout);
     auto range_1 = yap::make_terminal(std::vector<int>{1, 2, 3});
     auto range_2 = yap::make_terminal(std::vector<int>{4, 5, 6});
-    auto expr_1 = for_each_range(range_1, range_2)[
-        1_p + 2_p
+    for_each_range(range_1, range_2)[
+        cout << 1_p + 2_p << "\n"
     ];
     std::cout << "After for_each_range: ";
-    yap::print(std::cout, expr_1);
+    // yap::print(std::cout, expr_1);
     
 }
     return 0;
