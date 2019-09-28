@@ -81,10 +81,39 @@ auto PrintIRList(IRList &&irList) {
     printf("IR list:\n");
     hana::for_each(irList,
         [](auto const &ir) {
-            yap::print(std::cout, ir);
+            yap::print(std::cout, hana::first(ir));
         }
     );
 }
+
+// template <typename Sequence>
+// struct GenIR {
+//     Sequence mIRList;
+
+//     constexpr GenIR(const Sequence &seq) : mIRList(seq) {}
+
+//     template <typename Callable, typename ...Args>
+//     auto operator() (yap::expr_tag<yap::expr_kind::call>, Callable &&callable, Args &&...args) {
+//         printf("GenIR: call matched\n");
+//         auto assign = yap::make_expression<yap::expr_kind::assign>(
+//             yap::make_terminal(GenTemp()),
+//             yap::make_expression<yap::expr_kind::call>(yap::as_expr(callable), yap::as_expr(args)...)
+//         );
+//         printf("assign:\n");
+//         yap::print(std::cout, assign);
+//         return hana::append(mIRList, assign);
+//     }
+
+//     template <typename Expr1, typename Expr2>
+//     auto operator() (yap::expr_tag<yap::expr_kind::plus>, Expr1 &&lhs, Expr2 &&rhs) {
+//         printf("GenIR: plus matched\n");
+//         auto lhsList = yap::transform(yap::as_expr(lhs), GenIR<decltype(mIRList)>(mIRList));
+//         auto rhsList = yap::transform(yap::as_expr(rhs), GenIR<decltype(mIRList)>(mIRList));
+//         printf("lhsList:\n"); PrintIRList(lhsList);
+//         printf("rhsList:\n"); PrintIRList(rhsList);
+//         return hana::concat(hana::concat(mIRList, lhsList), rhsList);
+//     }
+// };
 
 template <typename Sequence>
 struct GenIR {
@@ -99,9 +128,8 @@ struct GenIR {
             yap::make_terminal(GenTemp()),
             yap::make_expression<yap::expr_kind::call>(yap::as_expr(callable), yap::as_expr(args)...)
         );
-        printf("assign:\n");
-        yap::print(std::cout, assign);
-        return hana::append(mIRList, assign);
+        printf("assign:\n"); yap::print(std::cout, assign);
+        return hana::append(mIRList, hana::make_pair(assign, yap::left(assign)));
     }
 
     template <typename Expr1, typename Expr2>
@@ -114,6 +142,10 @@ struct GenIR {
         return hana::concat(hana::concat(mIRList, lhsList), rhsList);
     }
 };
+
+
+
+
 // // This pass generates a sequence of IR
 // template <typename Sequence1, typename Sequence2>
 // struct GenIR {
