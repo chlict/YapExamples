@@ -86,35 +86,6 @@ auto PrintIRList(IRList &&irList) {
     );
 }
 
-// template <typename Sequence>
-// struct GenIR {
-//     Sequence mIRList;
-
-//     constexpr GenIR(const Sequence &seq) : mIRList(seq) {}
-
-//     template <typename Callable, typename ...Args>
-//     auto operator() (yap::expr_tag<yap::expr_kind::call>, Callable &&callable, Args &&...args) {
-//         printf("GenIR: call matched\n");
-//         auto assign = yap::make_expression<yap::expr_kind::assign>(
-//             yap::make_terminal(GenTemp()),
-//             yap::make_expression<yap::expr_kind::call>(yap::as_expr(callable), yap::as_expr(args)...)
-//         );
-//         printf("assign:\n");
-//         yap::print(std::cout, assign);
-//         return hana::append(mIRList, assign);
-//     }
-
-//     template <typename Expr1, typename Expr2>
-//     auto operator() (yap::expr_tag<yap::expr_kind::plus>, Expr1 &&lhs, Expr2 &&rhs) {
-//         printf("GenIR: plus matched\n");
-//         auto lhsList = yap::transform(yap::as_expr(lhs), GenIR<decltype(mIRList)>(mIRList));
-//         auto rhsList = yap::transform(yap::as_expr(rhs), GenIR<decltype(mIRList)>(mIRList));
-//         printf("lhsList:\n"); PrintIRList(lhsList);
-//         printf("rhsList:\n"); PrintIRList(rhsList);
-//         return hana::concat(hana::concat(mIRList, lhsList), rhsList);
-//     }
-// };
-
 template <typename Sequence>
 struct GenIR {
     Sequence mIRList;
@@ -156,60 +127,14 @@ struct GenIR {
 
 
 
-
-// // This pass generates a sequence of IR
-// template <typename Sequence1, typename Sequence2>
-// struct GenIR {
-//     // Sequence1 is the generated IR list
-//     Sequence1 mIRList;
-//     // Sequence2 is the extra information coresponding to each IR
-//     Sequence2 mInfoList;
-
-//     constexpr GenIR(const Sequence1 &seq1, const Sequence2 &seq2) : mIRList(seq1), mInfoList(seq2) {}
-
-//     template <typename Callable, typename ...Args>
-//     auto operator() (yap::expr_tag<yap::expr_kind::call>, Callable &&callable, Args &&...args) {
-//         printf("GenIR: call matched\n");
-//         if constexpr (sizeof...(Args) != 0) {
-//             auto argTuple = hana::make_tuple(args...);
-//         }
-
-//         // Gen IR: _temp = callable()
-//         auto temp = GenTemp();
-//         auto destExpr = yap::make_terminal(std::move(temp));
-//         auto assign = yap::make_expression<yap::expr_kind::assign>(destExpr,
-//             yap::make_expression<yap::expr_kind::call>(yap::as_expr(callable), yap::as_expr(args)...)
-//         );
-//         printf("assign:\n");
-//         yap::print(std::cout, assign);
-//         PrintIRList(hana::append(mIRList, std::move(assign)));
-//         return hana::make_pair(hana::append(mIRList, std::move(assign)), hana::append(mInfoList, destExpr));
-//     }
-
-//     template <typename Expr1, typename Expr2>
-//     auto operator() (yap::expr_tag<yap::expr_kind::plus>, Expr1 &&lhs, Expr2 &&rhs) {
-//         printf("GenIR: plus_expr matched\n");
-//         using Seq1 = decltype(mIRList);
-//         using Seq2 = decltype(mInfoList);
-//         auto lhsPair = yap::transform(yap::as_expr(lhs), GenIR<Seq1, Seq2>{mIRList, mInfoList});
-//         // PrintTypeName(hana::first(lhsPair));
-//         PrintIRList(hana::first(lhsPair));
-//         auto rhsPair = yap::transform(yap::as_expr(rhs), GenIR<Seq1, Seq2>{mIRList, mInfoList});
-//         PrintIRList(hana::first(rhsPair));
-//         auto expr = yap::make_expression<yap::expr_kind::plus>(yap::as_expr(lhs), yap::as_expr(rhs));
-//         return hana::make_pair(
-//             hana::concat(hana::concat(mIRList, hana::first(lhsPair)), hana::first(rhsPair)),
-//             hana::concat(hana::concat(mIRList, hana::second(lhsPair)), hana::second(rhsPair))
-//         );
-//     }
-// };
-
 int foo() { return 0; }
+
+int bar(int arg) { return 1; }
 
 int main() {
     auto call_foo = yap::make_terminal(foo);
     {
-        auto expr = (call_foo() + call_foo());
+        auto expr = (call_foo() + yap::make_terminal(bar)(1));
         // auto expr = call_foo();
         yap::print(std::cout, expr);
         // yap::transform(expr, xform{hana::make_map()});
