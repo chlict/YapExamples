@@ -137,9 +137,20 @@ struct GenIR {
         printf("GenIR: plus matched\n");
         auto lhsList = yap::transform(yap::as_expr(lhs), GenIR<decltype(mIRList)>(mIRList));
         auto rhsList = yap::transform(yap::as_expr(rhs), GenIR<decltype(mIRList)>(mIRList));
-        printf("lhsList:\n"); PrintIRList(lhsList);
-        printf("rhsList:\n"); PrintIRList(rhsList);
-        return hana::concat(hana::concat(mIRList, lhsList), rhsList);
+        // printf("lhsList:\n"); PrintIRList(lhsList);
+        // printf("rhsList:\n"); PrintIRList(rhsList);
+        // yap::print(std::cout, hana::second(hana::back(lhsList)));
+        // yap::print(std::cout, hana::second(hana::back(rhsList)));
+        auto assign = yap::make_expression<yap::expr_kind::assign>(
+            yap::make_terminal(GenTemp()),
+            yap::make_expression<yap::expr_kind::plus>(
+                // Use std::move here otherwise only an expr_ref is built and will be out of date outside of this function 
+                std::move(hana::second(hana::back(lhsList))),  // result operand of transformed lhs
+                std::move(hana::second(hana::back(rhsList)))   // result operand of transformed rhs
+            )
+        );
+        // The resulting IRList: tuple of {mIRList, lhsList, rhsList, assign}
+        return hana::append(hana::concat(hana::concat(mIRList, lhsList), rhsList), hana::make_pair(assign, yap::left(assign)));
     }
 };
 
