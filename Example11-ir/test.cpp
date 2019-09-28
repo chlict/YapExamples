@@ -103,6 +103,16 @@ struct GenIR {
         yap::print(std::cout, assign);
         return hana::append(mIRList, assign);
     }
+
+    template <typename Expr1, typename Expr2>
+    auto operator() (yap::expr_tag<yap::expr_kind::plus>, Expr1 &&lhs, Expr2 &&rhs) {
+        printf("GenIR: plus matched\n");
+        auto lhsList = yap::transform(yap::as_expr(lhs), GenIR<decltype(mIRList)>(mIRList));
+        auto rhsList = yap::transform(yap::as_expr(rhs), GenIR<decltype(mIRList)>(mIRList));
+        printf("lhsList:\n"); PrintIRList(lhsList);
+        printf("rhsList:\n"); PrintIRList(rhsList);
+        return hana::concat(hana::concat(mIRList, lhsList), rhsList);
+    }
 };
 // // This pass generates a sequence of IR
 // template <typename Sequence1, typename Sequence2>
@@ -156,8 +166,8 @@ int foo() { return 0; }
 int main() {
     auto call_foo = yap::make_terminal(foo);
     {
-        // auto expr = (call_foo() + call_foo());
-        auto expr = call_foo();
+        auto expr = (call_foo() + call_foo());
+        // auto expr = call_foo();
         yap::print(std::cout, expr);
         // yap::transform(expr, xform{hana::make_map()});
         // auto irList = yap::transform(expr, GenIR{hana::make_tuple(), hana::make_tuple()});
