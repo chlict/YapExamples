@@ -183,27 +183,15 @@ struct GenIR {
 //     }
 // };
 
-auto f1 = [](auto &&map, auto &&irPair) -> decltype(auto) {
-    auto const &ir = hana::first(irPair);
+auto f1 = [](auto &&map, auto &&ir) -> decltype(auto) {
     printf("f1:\n"); yap::print(std::cout, ir);
-    // return hana::insert(map, hana::make_pair(hana::llong_c<1>, ir));
-    // return yap::transform(ir, MatchIR{map});
+    return std::move(map);
 };
 
 template <typename Sequence>
 auto ScanIR(const Sequence &irList) {
     printf("ScanIR\n");
     auto m = hana::fold(irList, hana::make_map(), f1);
-    // auto newIRList = hana::transform(irList, [](auto &irPair) {
-    //     // yap::print(std::cout, hana::first(irPair));
-    //     auto const &ir = hana::first(irPair);
-    //     return yap::transform(ir, MatchIR{hana::make_map()});
-    // });
-
-    // printf("New IR list:\n");
-    // hana::for_each(newIRList, [](auto &ir) {
-    //     yap::print(std::cout, ir);
-    // });
 }
 
 int foo() { return 0; }
@@ -233,6 +221,6 @@ int main() {
         printf("After transform:\n");
         PrintIRList(gen.mIRList);
 
-        // ScanIR(irList);
+        ScanIR(gen.mIRList);
     }
 }
