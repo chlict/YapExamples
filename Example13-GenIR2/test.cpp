@@ -11,25 +11,25 @@ namespace hana = boost::hana;
 
 // A placeholder used by AssignTemps
 template <long long I>
-struct at_placeholder : boost::hana::llong<I> {
-    friend std::ostream& operator<< (std::ostream& os, const at_placeholder<I> &p) {
+struct temp_placeholder : boost::hana::llong<I> {
+    friend std::ostream& operator<< (std::ostream& os, const temp_placeholder<I> &p) {
         os << "temp" << I;
         return os;
     }
 };
 
-auto const _0 = yap::make_terminal(at_placeholder<0>{});
-auto const _1 = yap::make_terminal(at_placeholder<1>{});
-auto const _2 = yap::make_terminal(at_placeholder<2>{});
-auto const _3 = yap::make_terminal(at_placeholder<3>{});
-auto const _4 = yap::make_terminal(at_placeholder<4>{});
+auto const _0 = yap::make_terminal(temp_placeholder<0>{});
+auto const _1 = yap::make_terminal(temp_placeholder<1>{});
+auto const _2 = yap::make_terminal(temp_placeholder<2>{});
+auto const _3 = yap::make_terminal(temp_placeholder<3>{});
+auto const _4 = yap::make_terminal(temp_placeholder<4>{});
 
 template <typename ExprMap>
 struct placeholder_transform {
     template<long long I>
     auto operator()(
         boost::yap::expr_tag<boost::yap::expr_kind::terminal>,
-        at_placeholder<I> i)
+        temp_placeholder<I> i)
     {   
         printf("placeholder<%d> matched\n", I);
     }   
@@ -50,7 +50,7 @@ struct xform {
     }
 
     template <long long I, typename Expr2>
-    decltype(auto) constexpr operator()(yap::expr_tag<yap::expr_kind::assign>, at_placeholder<I> const &lhs, Expr2 &&rhs) const {
+    decltype(auto) constexpr operator()(yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &lhs, Expr2 &&rhs) const {
         std::cout << "xform: assign placeholder matched\n";
         yap::print(std::cout, yap::as_expr(std::forward<Expr2>(rhs)));
     }
@@ -103,7 +103,7 @@ struct GenIR {
         auto gen2 = yap::transform(yap::as_expr(rhs), gen1);
         // printf("gen2:\n"); PrintIRList(gen2.mIRList);
         auto constexpr index = decltype(gen2)::placeholder_index;
-        auto temp = yap::make_terminal(at_placeholder<index>{});
+        auto temp = yap::make_terminal(temp_placeholder<index>{});
         auto assign = yap::make_expression<yap::expr_kind::assign>(std::move(temp),
             yap::make_expression<Kind>(
                 std::move(hana::back(hana::drop_back(gen2.mStack))),
@@ -123,69 +123,71 @@ struct GenIR {
     auto operator() (yap::expr_tag<yap::expr_kind::call>, Callable &&callable, Args &&...args) {
         // printf("GenIR: call matched\n");
         auto assign = yap::make_expression<yap::expr_kind::assign>(
-            yap::make_terminal(at_placeholder<I>{}),
+            yap::make_terminal(temp_placeholder<I>{}),
             yap::make_expression<yap::expr_kind::call>(yap::as_expr(callable), yap::as_expr(args)...)
         );
         // printf("assign:\n"); yap::print(std::cout, assign);
         auto newIRList = hana::append(mIRList, std::move(assign));
-        auto newStack = hana::append(mStack, std::move(yap::make_terminal(at_placeholder<I>{})));
+        auto newStack = hana::append(mStack, std::move(yap::make_terminal(temp_placeholder<I>{})));
         return GenIR<decltype(newIRList), decltype(newStack), I + 1>{newIRList, newStack};
     }
 
 };
 
-// template <typename Map>
-// struct MatchIR {
-//     const Map &mMap; // A map from TempVar to expression
+template <typename Map>
+struct MatchIR {
+    const Map &mMap; // A map from TempVar to expression
 
-//     constexpr MatchIR(const Map &map) : mMap(map) {}
+    constexpr MatchIR(const Map &map) : mMap(map) {}
 
-//     template <typename Expr1, typename Expr2>
-//     auto operator() (yap::expr_tag<yap::expr_kind::assign>, Expr1 &&lhs, Expr2 &&rhs) {
-//         printf("MatchIR: common assign matched\n");
-//         assert(false && "Should not reach here");
-//     }
+    template <typename Expr1, typename Expr2>
+    auto operator() (yap::expr_tag<yap::expr_kind::assign>, Expr1 &&lhs, Expr2 &&rhs) {
+        printf("MatchIR: common assign matched\n");
+        assert(false && "Should not reach here");
+    }
 
-//     template <typename Expr2>
-//     auto operator() (yap::expr_tag<yap::expr_kind::assign>, TempVar const &temp, Expr2 &&rhs) {
-//         printf("MatchIR: assign to temp matched\n");
-//         assert(false && "Should not reach here");
-//     }
+    template <typename Expr2, long long I>
+    auto operator() (yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &temp, Expr2 &&rhs) const {
+        printf("MatchIR: assign to temp matched\n");
+        assert(false && "Should not reach here");
+    }
 
-//     template <typename Expr1, typename Expr2>
-//     auto operator() (yap::expr_tag<yap::expr_kind::assign>, TempVar const &temp,
-//                      yap::expression<yap::expr_kind::plus, hana::tuple<Expr1, Expr2>> const &plusExpr) {
-//         printf("MatchIR: assign _temp = lhs + rhs matched\n");
-//         auto lhs = yap::left(plusExpr);
-//         auto rhs = yap::right(plusExpr);
-//         static_assert(decltype(lhs)::kind == yap::expr_kind::terminal);
-//         static_assert(decltype(rhs)::kind == yap::expr_kind::terminal);
-//         auto newPlusExpr = yap::transform(plusExpr, ReplaceTemps{mMap});
-//         printf("newPlusExpr:\n");
-//         yap::print(std::cout, newPlusExpr);
-//         auto tensor = MakeTensor(temp.id);
-//         auto term = yap::make_terminal(std::move(tensor));
-//         return hana::insert(mMap, hana::make_pair(temp.id, term));
-//         // return yap::make_expression<yap::expr_kind::assign>(std::move(term), plusExpr);
-//         // std::cout << temp << std::endl;
-//     }
+    template <long long I, yap::expr_kind Binary, typename Expr1, typename Expr2>
+    auto operator() (yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &temp,
+                     yap::expression<Binary, hana::tuple<Expr1, Expr2>> const &binaryExpr) {
+        printf("MatchIR: assign _temp = lhs op rhs matched\n");
+        auto lhs = yap::left(binaryExpr);
+        auto rhs = yap::right(binaryExpr);
+        static_assert(decltype(lhs)::kind == yap::expr_kind::terminal);
+        static_assert(decltype(rhs)::kind == yap::expr_kind::terminal);
+        return mMap;
+        // auto newbinaryExpr = yap::transform(binaryExpr, ReplaceTemps{mMap});
+        // printf("newbinaryExpr:\n");
+        // yap::print(std::cout, newbinaryExpr);
+        // auto tensor = MakeTensor(temp.id);
+        // auto term = yap::make_terminal(std::move(tensor));
+        // return hana::insert(mMap, hana::make_pair(temp.id, term));
+        // return yap::make_expression<yap::expr_kind::assign>(std::move(term), binaryExpr);
+        // std::cout << temp << std::endl;
+    }
 
-//     template <typename Fn, typename ...Args>
-//     auto operator() (yap::expr_tag<yap::expr_kind::assign>, TempVar const &temp,
-//                      yap::expression<yap::expr_kind::call, hana::tuple<Fn, Args...>> const &callExpr) {
-//         printf("MatchIR: assign _temp = call matched\n");
-//         // std::cout << temp << std::endl;
-//         return mMap;
-//         // return yap::make_expression<yap::expr_kind::assign>(
-//         //     std::move(yap::as_expr(temp)),
-//         //     std::move(yap::as_expr(callExpr))
-//         // );
-//     }
-// };
+    template <long long I, typename Fn, typename ...Args>
+    auto operator() (yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &temp,
+                     yap::expression<yap::expr_kind::call, hana::tuple<Fn, Args...>> const &callExpr) {
+        printf("MatchIR: assign _temp = call matched\n");
+        // std::cout << temp << std::endl;
+        return mMap;
+        // return yap::make_expression<yap::expr_kind::assign>(
+        //     std::move(yap::as_expr(temp)),
+        //     std::move(yap::as_expr(callExpr))
+        // );
+    }
+};
 
 auto f1 = [](auto &&map, auto &&ir) -> decltype(auto) {
     printf("f1:\n"); yap::print(std::cout, ir);
-    return std::move(map);
+    // return std::move(map);
+    return yap::transform(ir, MatchIR{hana::make_map()});
 };
 
 template <typename Sequence>
