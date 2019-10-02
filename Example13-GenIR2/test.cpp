@@ -9,7 +9,7 @@
 namespace yap = boost::yap;
 namespace hana = boost::hana;
 
-// A placeholder used by AssignTemps
+// A placeholder for temporary variables
 template <long long I>
 struct temp_placeholder : boost::hana::llong<I> {
     friend std::ostream& operator<< (std::ostream& os, const temp_placeholder<I> &p) {
@@ -23,41 +23,6 @@ auto const _1 = yap::make_terminal(temp_placeholder<1>{});
 auto const _2 = yap::make_terminal(temp_placeholder<2>{});
 auto const _3 = yap::make_terminal(temp_placeholder<3>{});
 auto const _4 = yap::make_terminal(temp_placeholder<4>{});
-
-template <typename ExprMap>
-struct ReplaceTemps {
-
-    const ExprMap &mMap;
-    constexpr ReplaceTemps(const ExprMap &map) : mMap(map) {}
-
-    template<long long I>
-    auto operator()(
-        boost::yap::expr_tag<boost::yap::expr_kind::terminal>,
-        temp_placeholder<I> const &temp)
-    {   
-        static_assert(hana::contains(decltype(hana::keys(mMap))(),hana::llong_c<I>));
-        return mMap[boost::hana::llong_c<I>];
-    }   
-};
-
-template <typename ExprMap>
-struct xform {
-    ExprMap map_;
-
-    explicit constexpr xform(const ExprMap &map) : map_(map) {}
-
-    template <typename Expr1, typename Expr2>
-    decltype(auto) constexpr operator()(yap::expr_tag<yap::expr_kind::assign>, Expr1 &&lhs, Expr2 &&rhs) const {
-        std::cout << "xform: assign matched\n";
-        yap::print(std::cout, yap::as_expr(std::forward<Expr1>(lhs)));
-    }
-
-    template <long long I, typename Expr2>
-    decltype(auto) constexpr operator()(yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &lhs, Expr2 &&rhs) const {
-        std::cout << "xform: assign placeholder matched\n";
-        yap::print(std::cout, yap::as_expr(std::forward<Expr2>(rhs)));
-    }
-};
 
 template <typename IRList>
 auto PrintIRList(IRList &&irList) {
@@ -82,10 +47,10 @@ constexpr auto MakeTensor(int id) {
     return Tensor{id};
 }
 
-template <typename Sequence, typename Stack, long long I>
+template <typename Sequence, typename Stack, long long I = 1>
 struct GenIR {
-    Sequence mIRList;
-    Stack mStack;
+    const Sequence &mIRList;
+    const Stack &mStack;
     static const long long placeholder_index = I;
 
     constexpr GenIR(const Sequence &seq, const Stack &stk) : mIRList(seq), mStack(stk) {}
@@ -141,13 +106,7 @@ template <typename Map>
 struct AllocBufferXform {
     const Map &mMap; // A map from TempVar to expression
 
-    constexpr AllocBufferXform(const Map &map) : mMap(map) {
-        hana::for_each(mMap, [](auto &pair) {
-            std::cout << "first: " << hana::first(pair) << std::endl;
-            std::cout << "second: ";
-            yap::print(std::cout, hana::second(pair));
-        });
-    }
+    constexpr AllocBufferXform(const Map &map) : mMap(map) {}
 
     template <typename Expr1, typename Expr2>
     auto operator() (yap::expr_tag<yap::expr_kind::assign>, Expr1 &&lhs, Expr2 &&rhs) {
@@ -169,15 +128,10 @@ struct AllocBufferXform {
         auto rhs = yap::right(binaryExpr);
         static_assert(decltype(lhs)::kind == yap::expr_kind::terminal);
         static_assert(decltype(rhs)::kind == yap::expr_kind::terminal);
+        // TODO: use lhs's info to infer information for tensor
         auto tensor = MakeTensor(I);
         auto expr = yap::make_terminal(std::move(tensor));
-        auto newExpr = yap::transform(binaryExpr, ReplaceTemps{mMap});
-        printf("newExpr:\n");
-        yap::print(std::cout, newExpr);
         return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, expr));
-        // return mMap;
-        // return yap::make_expression<yap::expr_kind::assign>(std::move(term), binaryExpr);
-        // std::cout << temp << std::endl;
     }
 
     template <long long I, typename Fn, typename ...Args>
@@ -187,22 +141,41 @@ struct AllocBufferXform {
         auto tensor = MakeTensor(I);
         auto expr = yap::make_terminal(std::move(tensor));
         return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, expr));
-        // return yap::make_expression<yap::expr_kind::assign>(
-        //     std::move(yap::as_expr(temp)),
-        //     std::move(yap::as_expr(callExpr))
-        // );
     }
 };
 
+// Given a sequence of IRList, assign a tensor for each temp_placeholder and returns a map
+// recording them.
 template <typename Sequence>
 auto AllocBuffer(const Sequence &irList) {
-    printf("AllocBuffer\n");
     // Given a map and an expression, returns a new map containing placeholder => tensor
     auto fn = [](auto &&map, auto &&ir) -> decltype(auto) {
-        // printf("fn:\n"); yap::print(std::cout, ir);
         return yap::transform(ir, AllocBufferXform{map});
     };
+
     return hana::fold(irList, hana::make_map(), fn);
+}
+
+template <typename ExprMap>
+struct SubstituteXform {
+
+    const ExprMap &mMap;
+    constexpr SubstituteXform(const ExprMap &map) : mMap(map) {}
+
+    template<long long I>
+    auto operator()(yap::expr_tag<boost::yap::expr_kind::terminal>, temp_placeholder<I> const &temp) {   
+        static_assert(hana::contains(decltype(hana::keys(mMap))(),hana::llong_c<I>));
+        return mMap[boost::hana::llong_c<I>];
+    }   
+};
+
+// Given a sequence of IR and a map from temp_placeholders to expressions, substitute each
+// occurence of temp_placeholder for the corresponding expression
+template <typename Sequence, typename Map>
+auto SubstituteTemps(Sequence &&irList, Map &&map) {
+    return hana::transform(irList, [&map](auto const &ir) {
+        return yap::transform(ir, SubstituteXform{map});
+    });
 }
 
 int foo() { return 0; }
@@ -226,16 +199,13 @@ int main() {
         auto call_foo = yap::make_terminal(foo);
         auto expr = yap::make_terminal(a) * 2 + call_foo() + yap::make_terminal(b) * 3;
         yap::print(std::cout, expr);
-        using Seq = decltype(hana::make_tuple());
-        using Stk = Seq;
-        auto gen = yap::transform(expr, GenIR<Seq, Stk, 0>{hana::make_tuple(), hana::make_tuple()});
+        auto gen = yap::transform(expr, GenIR{hana::make_tuple(), hana::make_tuple()});
         printf("After transform:\n");
         PrintIRList(gen.mIRList);
 
-        auto map = AllocBuffer(gen.mIRList);
-        printf("After AllocBuffer:\n");
-        PrintIRList(gen.mIRList);
-
-
+        auto &&map = AllocBuffer(gen.mIRList);
+        auto irList2 = SubstituteTemps(gen.mIRList, map);
+        printf("After AllocBuffer and SubstituteTemps:\n");
+        PrintIRList(irList2);
     }
 }
