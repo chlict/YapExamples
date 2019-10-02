@@ -25,16 +25,19 @@ auto const _3 = yap::make_terminal(temp_placeholder<3>{});
 auto const _4 = yap::make_terminal(temp_placeholder<4>{});
 
 template <typename ExprMap>
-struct placeholder_transform {
+struct ReplaceTemps {
+
+    const ExprMap &mMap;
+    constexpr ReplaceTemps(const ExprMap &map) : mMap(map) {}
+
     template<long long I>
     auto operator()(
         boost::yap::expr_tag<boost::yap::expr_kind::terminal>,
-        temp_placeholder<I> i)
+        temp_placeholder<I> const &temp)
     {   
-        printf("placeholder<%d> matched\n", I);
+        static_assert(hana::contains(decltype(hana::keys(mMap))(),hana::llong_c<I>));
+        return mMap[boost::hana::llong_c<I>];
     }   
-
-    ExprMap map_;
 };
 
 template <typename ExprMap>
@@ -135,38 +138,44 @@ struct GenIR {
 };
 
 template <typename Map>
-struct MatchIR {
+struct AllocBufferXform {
     const Map &mMap; // A map from TempVar to expression
 
-    constexpr MatchIR(const Map &map) : mMap(map) {}
+    constexpr AllocBufferXform(const Map &map) : mMap(map) {
+        hana::for_each(mMap, [](auto &pair) {
+            std::cout << "first: " << hana::first(pair) << std::endl;
+            std::cout << "second: ";
+            yap::print(std::cout, hana::second(pair));
+        });
+    }
 
     template <typename Expr1, typename Expr2>
     auto operator() (yap::expr_tag<yap::expr_kind::assign>, Expr1 &&lhs, Expr2 &&rhs) {
-        printf("MatchIR: common assign matched\n");
+        printf("AllocBufferXform: common assign matched\n");
         assert(false && "Should not reach here");
     }
 
     template <typename Expr2, long long I>
     auto operator() (yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &temp, Expr2 &&rhs) const {
-        printf("MatchIR: assign to temp matched\n");
+        printf("AllocBufferXform: assign to temp matched\n");
         assert(false && "Should not reach here");
     }
 
     template <long long I, yap::expr_kind Binary, typename Expr1, typename Expr2>
     auto operator() (yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &temp,
                      yap::expression<Binary, hana::tuple<Expr1, Expr2>> const &binaryExpr) {
-        printf("MatchIR: assign _temp = lhs op rhs matched\n");
+        printf("AllocBufferXform: assign _temp = lhs op rhs matched\n");
         auto lhs = yap::left(binaryExpr);
         auto rhs = yap::right(binaryExpr);
         static_assert(decltype(lhs)::kind == yap::expr_kind::terminal);
         static_assert(decltype(rhs)::kind == yap::expr_kind::terminal);
         auto tensor = MakeTensor(I);
-        auto term = yap::make_terminal(std::move(tensor));
-        return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, term));
+        auto expr = yap::make_terminal(std::move(tensor));
+        auto newExpr = yap::transform(binaryExpr, ReplaceTemps{mMap});
+        printf("newExpr:\n");
+        yap::print(std::cout, newExpr);
+        return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, expr));
         // return mMap;
-        // auto newbinaryExpr = yap::transform(binaryExpr, ReplaceTemps{mMap});
-        // printf("newbinaryExpr:\n");
-        // yap::print(std::cout, newbinaryExpr);
         // return yap::make_expression<yap::expr_kind::assign>(std::move(term), binaryExpr);
         // std::cout << temp << std::endl;
     }
@@ -174,9 +183,10 @@ struct MatchIR {
     template <long long I, typename Fn, typename ...Args>
     auto operator() (yap::expr_tag<yap::expr_kind::assign>, temp_placeholder<I> const &temp,
                      yap::expression<yap::expr_kind::call, hana::tuple<Fn, Args...>> const &callExpr) {
-        printf("MatchIR: assign _temp = call matched\n");
-        // std::cout << temp << std::endl;
-        return mMap;
+        printf("AllocBufferXform: assign _temp = call matched\n");
+        auto tensor = MakeTensor(I);
+        auto expr = yap::make_terminal(std::move(tensor));
+        return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, expr));
         // return yap::make_expression<yap::expr_kind::assign>(
         //     std::move(yap::as_expr(temp)),
         //     std::move(yap::as_expr(callExpr))
@@ -184,16 +194,15 @@ struct MatchIR {
     }
 };
 
-auto f1 = [](auto &&map, auto &&ir) -> decltype(auto) {
-    printf("f1:\n"); yap::print(std::cout, ir);
-    // return std::move(map);
-    return yap::transform(ir, MatchIR{map});
-};
-
 template <typename Sequence>
-auto ScanIR(const Sequence &irList) {
-    printf("ScanIR\n");
-    auto m = hana::fold(irList, hana::make_map(), f1);
+auto AllocBuffer(const Sequence &irList) {
+    printf("AllocBuffer\n");
+    // Given a map and an expression, returns a new map containing placeholder => tensor
+    auto fn = [](auto &&map, auto &&ir) -> decltype(auto) {
+        // printf("fn:\n"); yap::print(std::cout, ir);
+        return yap::transform(ir, AllocBufferXform{map});
+    };
+    return hana::fold(irList, hana::make_map(), fn);
 }
 
 int foo() { return 0; }
@@ -223,6 +232,10 @@ int main() {
         printf("After transform:\n");
         PrintIRList(gen.mIRList);
 
-        ScanIR(gen.mIRList);
+        auto map = AllocBuffer(gen.mIRList);
+        printf("After AllocBuffer:\n");
+        PrintIRList(gen.mIRList);
+
+
     }
 }
