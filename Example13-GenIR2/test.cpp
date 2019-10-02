@@ -160,13 +160,13 @@ struct MatchIR {
         auto rhs = yap::right(binaryExpr);
         static_assert(decltype(lhs)::kind == yap::expr_kind::terminal);
         static_assert(decltype(rhs)::kind == yap::expr_kind::terminal);
-        return mMap;
+        auto tensor = MakeTensor(I);
+        auto term = yap::make_terminal(std::move(tensor));
+        return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, term));
+        // return mMap;
         // auto newbinaryExpr = yap::transform(binaryExpr, ReplaceTemps{mMap});
         // printf("newbinaryExpr:\n");
         // yap::print(std::cout, newbinaryExpr);
-        // auto tensor = MakeTensor(temp.id);
-        // auto term = yap::make_terminal(std::move(tensor));
-        // return hana::insert(mMap, hana::make_pair(temp.id, term));
         // return yap::make_expression<yap::expr_kind::assign>(std::move(term), binaryExpr);
         // std::cout << temp << std::endl;
     }
@@ -187,7 +187,7 @@ struct MatchIR {
 auto f1 = [](auto &&map, auto &&ir) -> decltype(auto) {
     printf("f1:\n"); yap::print(std::cout, ir);
     // return std::move(map);
-    return yap::transform(ir, MatchIR{hana::make_map()});
+    return yap::transform(ir, MatchIR{map});
 };
 
 template <typename Sequence>
