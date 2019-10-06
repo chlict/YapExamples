@@ -192,7 +192,7 @@ auto print_func_result_type(Fn &&fn) {
 }
 
 int main() {
-    print_func_result_type(foo);
+    // print_func_result_type(foo);
     long a = 10;
     long b = 20;
     {
