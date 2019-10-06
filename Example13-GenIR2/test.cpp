@@ -8,6 +8,7 @@
 
 namespace yap = boost::yap;
 namespace hana = boost::hana;
+using namespace hana::literals;
 
 // A placeholder for temporary variables
 template <long long I>
@@ -49,11 +50,15 @@ constexpr auto MakeTensor(int id) {
 
 template <typename Sequence, typename Stack, long long I = 1>
 struct GenIR {
-    const Sequence &mIRList;
-    const Stack &mStack;
+    Sequence mIRList;
+    Stack mStack;
     static const long long placeholder_index = I;
 
-    constexpr GenIR(const Sequence &seq, const Stack &stk) : mIRList(seq), mStack(stk) {}
+    constexpr GenIR(const Sequence &seq, const Stack &stk) : mIRList(seq), mStack(stk) {
+        // printf("GenIR constructor:\n");
+        // printf("mIRList: "); hana::for_each(mIRList, [](const auto &ir) {yap::print(std::cout, ir);});
+        // printf("mStack: "); hana::for_each(mStack, [](const auto &expr) {yap::print(std::cout, expr);});
+    }
 
     template <typename T>
     auto operator() (yap::expr_tag<yap::expr_kind::terminal>, T &&t) {
@@ -66,20 +71,21 @@ struct GenIR {
     template <yap::expr_kind Kind, typename Expr1, typename Expr2>
     auto operator() (yap::expr_tag<Kind>, Expr1 &&lhs, Expr2 &&rhs) {
         // printf("GenIR: binary op matched\n");
-        auto gen1 = yap::transform(yap::as_expr(lhs), GenIR<decltype(mIRList), decltype(mStack), I>(mIRList, mStack));
-        // printf("gen1:\n"); PrintIRList(gen1.mIRList);
-        auto gen2 = yap::transform(yap::as_expr(rhs), gen1);
-        // printf("gen2:\n"); PrintIRList(gen2.mIRList);
-        auto constexpr index = decltype(gen2)::placeholder_index;
+        auto genLhs = yap::transform(yap::as_expr(lhs), GenIR<decltype(mIRList), decltype(mStack), I>(mIRList, mStack));
+        // printf("genLhs:\n"); PrintIRList(genLhs.mIRList);
+        auto genRhs = yap::transform(yap::as_expr(rhs), genLhs);
+        // printf("genRhs:\n"); PrintIRList(genRhs.mIRList);
+        auto constexpr index = decltype(genRhs)::placeholder_index;
         auto temp = yap::make_terminal(temp_placeholder<index>{});
+        auto constexpr N = hana::length(genRhs.mStack);
         auto assign = yap::make_expression<yap::expr_kind::assign>(std::move(temp),
             yap::make_expression<Kind>(
-                std::move(hana::back(hana::drop_back(gen2.mStack))),
-                std::move(hana::back(gen2.mStack))
+                std::move(genRhs.mStack[N - hana::size_c<2>]),  // secondary top of stack
+                std::move(genRhs.mStack[N - hana::size_c<1>])   // top of stack
             )
         );
         // printf("append:\n"); yap::print(std::cout, assign);
-        auto newIRList = hana::append(gen2.mIRList, std::move(assign));
+        auto newIRList = hana::append(genRhs.mIRList, std::move(assign));
         // Skip poping operands from mStack
         // Push result onto stack
         auto newStack = hana::append(mStack, std::move(temp));
