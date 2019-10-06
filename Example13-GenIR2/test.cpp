@@ -75,13 +75,13 @@ struct GenIR {
         // printf("genLhs:\n"); PrintIRList(genLhs.mIRList);
         auto genRhs = yap::transform(yap::as_expr(rhs), genLhs);
         // printf("genRhs:\n"); PrintIRList(genRhs.mIRList);
+
         auto constexpr index = decltype(genRhs)::placeholder_index;
         auto temp = yap::make_terminal(temp_placeholder<index>{});
-        auto constexpr N = hana::length(genRhs.mStack);
         auto assign = yap::make_expression<yap::expr_kind::assign>(std::move(temp),
             yap::make_expression<Kind>(
-                std::move(genRhs.mStack[N - hana::size_c<2>]),  // secondary top of stack
-                std::move(genRhs.mStack[N - hana::size_c<1>])   // top of stack
+                std::move(hana::back(genLhs.mStack)),  // lhs's result
+                std::move(hana::back(genRhs.mStack))   // rhs's result
             )
         );
         // printf("append:\n"); yap::print(std::cout, assign);
