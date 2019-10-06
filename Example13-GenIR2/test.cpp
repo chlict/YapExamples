@@ -128,7 +128,7 @@ struct AllocBufferXform {
         auto rhs = yap::right(binaryExpr);
         static_assert(decltype(lhs)::kind == yap::expr_kind::terminal);
         static_assert(decltype(rhs)::kind == yap::expr_kind::terminal);
-        // TODO: use lhs's info to infer information for tensor
+        // TODO: use rhs's info to infer information for tensor
         auto tensor = MakeTensor(I);
         auto expr = yap::make_terminal(std::move(tensor));
         return hana::insert(mMap, hana::make_pair(hana::llong_c<I>, expr));
